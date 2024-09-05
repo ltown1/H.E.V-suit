@@ -1,0 +1,32 @@
+{
+  "minor_laceration": {
+    "sounds": [{"name": "hevsoundmod:sounds/minor_laceration"}]
+  },
+  "major_laceration": {
+    "sounds": [{"name": "hevsoundmod:sounds/major_laceration"}]
+  },
+  "minor_fracture": {
+    "sounds": [{"name": "hevsoundmod:sounds/minor_fracture"}]
+  },
+  "major_fracture": {
+    "sounds": [{"name": "hevsoundmod:sounds/major_fracture"}]
+  },
+  "blood_loss": {
+    "sounds": [{"name": "hevsoundmod:sounds/blood_loss"}]
+  },
+  "vital_signs_dropping": {
+    "sounds": [{"name": "hevsoundmod:sounds/health_dropping2"}]
+  },
+  "health_critical": {
+    "sounds": [{"name": "hevsoundmod:sounds/health_critical"}]
+  },
+  "health_critical2": {
+    "sounds": [{"name": "hevsoundmod:sounds/health_critical2"}]
+  },
+  "morphine_administered": {
+    "sounds": [{"name": "hevsoundmod:sounds/morphine_administered"}]
+  },
+  "seek_medical": {
+    "sounds": [{"name": "hevsoundmod:sounds/seek_medical"}]
+  }
+}

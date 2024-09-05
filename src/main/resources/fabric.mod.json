@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "hev_suit",
+  "version": "${version}",
+  "name": "HEV Suit",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/hev_suit/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "ltown.hev_suit.client.Hev_suitClient"
+    ],
+    "main": [
+      "ltown.hev_suit.Hev_suit"
+    ]
+  },
+  "mixins": [
+    "hev_suit.mixins.json",
+    {
+      "config": "hev_suit.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
