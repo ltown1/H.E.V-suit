@@ -1,32 +1,67 @@
 {
   "minor_laceration": {
-    "sounds": [{"name": "hevsoundmod:sounds/minor_laceration"}]
+    "sounds": [{"name": "hev_suit:minor_lacerations"}]
   },
   "major_laceration": {
-    "sounds": [{"name": "hevsoundmod:sounds/major_laceration"}]
+    "sounds": [{"name": "hev_suit:major_lacerations"}]
   },
   "minor_fracture": {
-    "sounds": [{"name": "hevsoundmod:sounds/minor_fracture"}]
+    "sounds": [{"name": "hev_suit:minor_fracture"}]
   },
   "major_fracture": {
-    "sounds": [{"name": "hevsoundmod:sounds/major_fracture"}]
+    "sounds": [{"name": "hev_suit:major_fracture"}]
   },
   "blood_loss": {
-    "sounds": [{"name": "hevsoundmod:sounds/blood_loss"}]
-  },
-  "vital_signs_dropping": {
-    "sounds": [{"name": "hevsoundmod:sounds/health_dropping2"}]
+    "sounds": [{"name": "hev_suit:blood_loss"}]
   },
   "health_critical": {
-    "sounds": [{"name": "hevsoundmod:sounds/health_critical"}]
+    "sounds": [{"name": "hev_suit:health_critical"}]
   },
   "health_critical2": {
-    "sounds": [{"name": "hevsoundmod:sounds/health_critical2"}]
+    "sounds": [{"name": "hev_suit:health_critical2"}]
   },
   "morphine_administered": {
-    "sounds": [{"name": "hevsoundmod:sounds/morphine_administered"}]
+    "sounds": [{"name": "hev_suit:morphine_administered"}]
   },
   "seek_medical": {
-    "sounds": [{"name": "hevsoundmod:sounds/seek_medical"}]
+    "sounds": [{"name": "hev_suit:seek_medic"}]
+  },
+  "near_death": {
+    "sounds": [{"name": "hev_suit:near_death"}]
+  },
+  "heat_damage": {
+    "sounds": [{"name": "hev_suit:heat_damage"}]
+  },
+  "chemical": {
+    "sounds": [{"name": "hev_suit:chemical"}]
+  },
+  "morphine_system": {
+    "sounds": [{"name": "hev_suit:morphine_system"}]
+  },
+  "radiation": {
+    "sounds": [{"name": "hev_suit:radiation_detected"}]
+  },
+  "north": {
+    "sounds": [{"name": "hev_suit:north"}]
+  },
+  "south": {
+    "sounds": [{"name":  "hev_suit:south"}]
+  },
+  "west": {
+    "sounds": [{"name":  "hev_suit:west"}]
+  },
+  "east": {
+    "sounds": [{"name":  "hev_suit:east"}]
+  },
+
+
+  "danger": {
+    "sounds": [{"name":  "hev_suit:danger"}]
+  },
+  "evacuate_area": {
+    "sounds": [{"name":  "hev_suit:evacuate_area"}]
+  },
+  "immediately": {
+    "sounds": [{"name":  "hev_suit:immediately"}]
   }
 }

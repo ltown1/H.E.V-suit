@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "ltown.hev_suit.mixin.client",
+  "package": "ltown.hev_suit.client.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
   ],

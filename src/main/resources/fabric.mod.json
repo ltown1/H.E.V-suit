@@ -1,20 +1,17 @@
 {
   "schemaVersion": 1,
   "id": "hev_suit",
-  "version": "${version}",
+  "version": "0.2",
   "name": "HEV Suit",
-  "description": "",
-  "authors": [],
+  "description": "Sometimes, i dream of cheese.",
+  "authors": ["Lunatictown"],
   "contact": {},
   "license": "All-Rights-Reserved",
-  "icon": "assets/hev_suit/icon.png",
+
   "environment": "client",
   "entrypoints": {
     "client": [
       "ltown.hev_suit.client.Hev_suitClient"
-    ],
-    "main": [
-      "ltown.hev_suit.Hev_suit"
     ]
   },
   "mixins": [
@@ -25,8 +22,8 @@
     }
   ],
   "depends": {
-    "fabricloader": ">=${loader_version}",
+    "fabricloader": "*",
     "fabric": "*",
-    "minecraft": "${minecraft_version}"
+    "minecraft": "*"
   }
 }
