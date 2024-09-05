@@ -63,5 +63,12 @@
   },
   "immediately": {
     "sounds": [{"name":  "hev_suit:immediately"}]
+  },
+  "voice_on": {
+    "sounds": [{"name":  "hev_suit:voice_on"}]
+  },
+  "voice_off": {
+    "sounds": [{"name":  "hev_suit:voice_off"}]
   }
+
 }
