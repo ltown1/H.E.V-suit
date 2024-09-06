@@ -12,7 +12,7 @@ This mod adds sound effects (including unused and repurposed ones) from the half
 - Voice System Toggle with ```/hevtoggle```
 
 
-
+If you are browsing thru the code, im sorry for how bad its gonna be.
 
 
 
