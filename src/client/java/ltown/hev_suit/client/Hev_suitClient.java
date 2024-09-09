@@ -3,6 +3,8 @@ package ltown.hev_suit.client;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.entity.Entity;
@@ -16,77 +18,66 @@ import net.minecraft.util.Identifier;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.math.Box;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.text.Text;
-
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 
 public class Hev_suitClient implements ClientModInitializer {
 
     private static final Map<String, SoundEvent> SOUND_EVENTS = new HashMap<>();
     private static final Map<String, Integer> SOUND_DURATIONS = new HashMap<>(); // Duration in milliseconds
+    private static final Queue<String> SOUND_QUEUE = new LinkedList<>();
+    private static final Set<String> HEALTH_SOUNDS = Set.of(
+        "major_laceration", "minor_laceration", "major_fracture", 
+        "blood_loss", "health_critical", "health_critical2", 
+        "morphine_administered", "seek_medical", "near_death"
+    );
+
     private float lastHealth = 20.0f;
+    private boolean radarEnabled = true;
+    private boolean hevSuitEnabled = true;
+    private boolean isSoundPlaying = false;
 
     private long lastSoundTime = 0;
-    private long gameStartTime = 0;
     private long lastMorphineTime = 0;
     private long lastBurningTime = 0;
     private long lastLacerationTime = 0;
     private long lastBloodLossTime = 0;
-    private long lastDirectionalWarningTime = 0;
     private long lastRadarTime = 0;
     private long lastRadarVoiceLineTime = 0;
-    private static final long SOUND_COOLDOWN = 900; // 1 second cooldown
-    private static final long MORPHINE_COOLDOWN = 900000; 
-    private static final long BURNING_COOLDOWN = 5000; // 5 seconds cooldown
-    private static final long BLOOD_LOSS_COOLDOWN = 5000; // 5 seconds cooldown
-    private static final long DIRECTIONAL_WARNING_COOLDOWN = 5000; // 5 seconds cooldown
-    private static final long RADAR_COOLDOWN = 3000; // 5 seconds cooldown for radar
-    private static final long RADAR_VOICE_LINE_COOLDOWN = 10000; // 1 minute 30 seconds cooldown for radar voice lines
-    private static final long SOUND_PLAY_DELAY = 600; // 500 milliseconds (half a second) delay after sound
-
-    private static final Queue<String> SOUND_QUEUE = new LinkedList<>();
-    private boolean isSoundPlaying = false;
     private long soundEndTime = 0;
 
-    private boolean hevSuitEnabled = true;
+    private static final long SOUND_COOLDOWN = 900;
+    private static final long MORPHINE_COOLDOWN = 900000;
+    private static final long BURNING_COOLDOWN = 5000;
+    private static final long BLOOD_LOSS_COOLDOWN = 5000;
+    private static final long RADAR_COOLDOWN = 3000;
+    private static final long RADAR_VOICE_LINE_COOLDOWN = 10000;
+    private static final long SOUND_PLAY_DELAY = 600;
 
     @Override
     public void onInitializeClient() {
         registerSounds();
         registerEventListeners();
-        registerToggleCommand();
-        gameStartTime = System.currentTimeMillis();
+        registerToggleCommands();
     }
 
     private void registerSounds() {
-        registerSound("major_laceration", 1200);
-        registerSound("minor_laceration", 1000);
-        registerSound("major_fracture", 2000);
-        registerSound("blood_loss", 1300);
-        registerSound("health_critical", 1500);
-        registerSound("health_critical2", 1600);
-        registerSound("morphine_administered", 1400);
-        registerSound("seek_medical", 1700);
-        registerSound("near_death", 1900);
-        registerSound("morphine_system", 1900);
-        registerSound("heat_damage", 1200);
-        registerSound("warning", 1000);
-        registerSound("bio_reading", 1200);
-        registerSound("danger", 1200);
-        registerSound("evacuate_area", 1200);
-        registerSound("immediately", 1200);
-        registerSound("north", 1000);
-        registerSound("south", 1000);
-        registerSound("east", 1000);
-        registerSound("west", 1000);
-        registerSound("voice_on", 1500);
-        registerSound("voice_off", 1500);
+        String[] soundNames = {
+            "major_laceration", "minor_laceration", "major_fracture", "blood_loss",
+            "health_critical", "health_critical2", "morphine_system", "morphine_administered", "seek_medical",
+            "near_death", "heat_damage", "warning", "bio_reading",
+            "danger", "evacuate_area", "immediately", "north", "south", "east", "west",
+            "voice_on", "voice_off"
+        };
+        int[] durations = {
+            1200, 1000, 2000, 1300, 1500, 1600, 1400, 1700, 1900, 1900,
+            1200, 1000, 1200, 1200, 1200, 1200, 1000, 1000, 1000, 1000,
+            1500, 1500
+        };
+
+        for (int i = 0; i < soundNames.length; i++) {
+            registerSound(soundNames[i], durations[i]);
+        }
     }
 
     private void registerSound(String name, int duration) {
@@ -101,35 +92,37 @@ public class Hev_suitClient implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> resetTracking());
     }
 
-    private void registerToggleCommand() {
+    private void registerToggleCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(ClientCommandManager.literal("hevtoggle")
                 .executes(context -> {
                     hevSuitEnabled = !hevSuitEnabled;
                     String status = hevSuitEnabled ? "Activated" : "Deactivated";
                     context.getSource().sendFeedback(Text.literal("Voice System " + status));
-                    
-                    if (hevSuitEnabled) {
-                        queueSoundOverride("voice_on");
-                    } else {
-                        queueSoundOverride("voice_off");
-                    }
-                    
+                    queueSoundOverride(hevSuitEnabled ? "voice_on" : "voice_off");
+                    return 1;
+                })
+            );
+
+            dispatcher.register(ClientCommandManager.literal("hevtoggleradar")
+                .executes(context -> {
+                    radarEnabled = !radarEnabled;
+                    String status = radarEnabled ? "Activated" : "Deactivated";
+                    context.getSource().sendFeedback(Text.literal("HEV Radar " + status));
                     return 1;
                 })
             );
         });
     }
-
     private void resetTracking() {
         lastHealth = 20.0f;
         lastSoundTime = 0;
-        gameStartTime = System.currentTimeMillis();
+ 
         lastMorphineTime = 0;
         lastBurningTime = 0;
         lastLacerationTime = 0;
         lastBloodLossTime = 0;
-        lastDirectionalWarningTime = 0;
+    
         lastRadarTime = 0;
         lastRadarVoiceLineTime = 0;
         isSoundPlaying = false;
@@ -169,16 +162,20 @@ public class Hev_suitClient implements ClientModInitializer {
             handleDamage(client, damage, player.getRecentDamageSource());
         }
 
-        if (currentHealth <= 1.0 && this.lastHealth > 1.0) {
+        if (currentHealth <= 3.0 && this.lastHealth > 3.0) {
             this.queueSound("near_death");
-        } else if (currentHealth <= 3.0 && this.lastHealth > 3.0) {
+        } 
+        else if (currentHealth <= 5.0 && this.lastHealth > 5.0) {
+            this.queueSound("health_critical");
+        }
+        else if (currentHealth <= 10.0 && this.lastHealth > 10.0) {
             this.queueSound("seek_medical");
         } else if (currentHealth <= 17.0 && this.lastHealth > 17.0) {
             this.queueSound("health_critical2");
         }
 
         if (currentTime - lastMorphineTime >= MORPHINE_COOLDOWN && currentHealth < 20) {
-            queueSound("morphine_system");
+     
             queueSound("morphine_administered");
             lastMorphineTime = currentTime;
         }
@@ -189,8 +186,7 @@ public class Hev_suitClient implements ClientModInitializer {
     }
 
     private void detectHostileMobsNearby(MinecraftClient client) {
-        if (!hevSuitEnabled) return;
-
+        if (!hevSuitEnabled || !radarEnabled) return;
         PlayerEntity player = client.player;
         if (player == null || client.world == null) return;
 
@@ -280,7 +276,7 @@ public class Hev_suitClient implements ClientModInitializer {
         if (!SOUND_QUEUE.isEmpty()) {
             if (!isSoundPlaying || (currentTime - soundEndTime >= SOUND_PLAY_DELAY)) {
                 if (currentTime - lastSoundTime >= SOUND_COOLDOWN) {
-                    String soundName = SOUND_QUEUE.poll();
+                    String soundName = getNextPrioritizedSound();
                     SoundEvent sound = SOUND_EVENTS.get(soundName);
                     if (sound != null) {
                         client.getSoundManager().play(PositionedSoundInstance.master(sound, 1.0F));
@@ -293,5 +289,18 @@ public class Hev_suitClient implements ClientModInitializer {
         } else {
             isSoundPlaying = false;
         }
+    }
+    
+    private String getNextPrioritizedSound() {
+      
+        
+        for (String sound : SOUND_QUEUE) {
+            if (HEALTH_SOUNDS.contains(sound)) {
+                SOUND_QUEUE.remove(sound);
+                return sound;
+            }
+        }
+        
+        return SOUND_QUEUE.poll();
     }
 }

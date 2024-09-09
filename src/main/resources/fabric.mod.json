@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "hev_suit",
-  "version": "0.2",
-  "name": "HEV Suit",
-  "description": "Sometimes, i dream of cheese.",
-  "authors": ["Lunatictown"],
+  "version": "0.1.2",
+  "name": "HEV Suit Sound System",
+  "description": "A mod that lets you hear hev suit sounds",
+  "authors": ["ltown1"],
   "contact": {},
-  "license": "All-Rights-Reserved",
+  "license": "MIT",
 
   "environment": "client",
   "entrypoints": {
