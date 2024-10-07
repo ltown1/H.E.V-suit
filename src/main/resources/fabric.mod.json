@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "hev_suit",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "name": "HEV Suit Sound System",
   "description": "A mod that lets you hear hev suit sounds",
   "authors": ["ltown1"],

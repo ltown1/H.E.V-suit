@@ -1,5 +1,6 @@
 package ltown.hev_suit.client;
 
+import com.mojang.brigadier.arguments.FloatArgumentType;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -8,7 +9,10 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.ArrowEntity;
@@ -21,6 +25,7 @@ import net.minecraft.util.math.Box;
 import net.minecraft.text.Text;
 import java.util.*;
 
+
 public class Hev_suitClient implements ClientModInitializer {
 
     private static final Map<String, SoundEvent> SOUND_EVENTS = new HashMap<>();
@@ -29,13 +34,14 @@ public class Hev_suitClient implements ClientModInitializer {
     private static final Set<String> HEALTH_SOUNDS = Set.of(
         "major_laceration", "minor_laceration", "major_fracture", 
         "blood_loss", "health_critical", "health_critical2", 
-        "morphine_administered", "seek_medical", "near_death"
+        "morphine_administered", "seek_medical", "near_death", "heat_damage", "shock_damage", "internal_bleeding","minor_fracture"
     );
 
     private float lastHealth = 20.0f;
     private boolean radarEnabled = true;
     private boolean hevSuitEnabled = true;
     private boolean isSoundPlaying = false;
+    private boolean wasPoisoned = false;
 
     private long lastSoundTime = 0;
     private long lastMorphineTime = 0;
@@ -47,12 +53,14 @@ public class Hev_suitClient implements ClientModInitializer {
     private long soundEndTime = 0;
 
     private static final long SOUND_COOLDOWN = 900;
-    private static final long MORPHINE_COOLDOWN = 900000;
+    private static final long MORPHINE_COOLDOWN = 90000;
     private static final long BURNING_COOLDOWN = 5000;
     private static final long BLOOD_LOSS_COOLDOWN = 5000;
     private static final long RADAR_COOLDOWN = 3000;
     private static final long RADAR_VOICE_LINE_COOLDOWN = 10000;
     private static final long SOUND_PLAY_DELAY = 600;
+
+    private static float volume = 1.0f; // Start at 100% volume
 
     @Override
     public void onInitializeClient() {
@@ -61,20 +69,28 @@ public class Hev_suitClient implements ClientModInitializer {
         registerToggleCommands();
     }
 
+    public static float getVolume() {
+        return volume;
+    }
+
+    public static void setVolume(float newVolume) {
+        volume = Math.max(0, Math.min(1, newVolume)); // Allow up to 100% volume
+    }
+
     private void registerSounds() {
         String[] soundNames = {
             "major_laceration", "minor_laceration", "major_fracture", "blood_loss",
             "health_critical", "health_critical2", "morphine_system", "morphine_administered", "seek_medical",
             "near_death", "heat_damage", "warning", "bio_reading",
             "danger", "evacuate_area", "immediately", "north", "south", "east", "west",
-            "voice_on", "voice_off"
+            "voice_on", "voice_off", "shock_damage", "internal_bleeding", "minor_fracture","chemical"
         };
         int[] durations = {
             1200, 1000, 2000, 1300, 1500, 1600, 1400, 1700, 1900, 1900,
             1200, 1000, 1200, 1200, 1200, 1200, 1000, 1000, 1000, 1000,
-            1500, 1500
+            1500, 1500, 1500, 1000, 1200, 1600
         };
-
+    
         for (int i = 0; i < soundNames.length; i++) {
             registerSound(soundNames[i], durations[i]);
         }
@@ -112,17 +128,27 @@ public class Hev_suitClient implements ClientModInitializer {
                     return 1;
                 })
             );
+
+            dispatcher.register(ClientCommandManager.literal("hevvolume")
+                .then(ClientCommandManager.argument("volume", FloatArgumentType.floatArg(0, 1))
+                    .executes(context -> {
+                        float newVolume = FloatArgumentType.getFloat(context, "volume");
+                        setVolume(newVolume);
+                        context.getSource().sendFeedback(Text.literal("HEV Suit volume set to " + (int)(newVolume * 100) + "%"));
+                        return 1;
+                    })
+                )
+            );
         });
     }
+
     private void resetTracking() {
         lastHealth = 20.0f;
         lastSoundTime = 0;
- 
         lastMorphineTime = 0;
         lastBurningTime = 0;
         lastLacerationTime = 0;
         lastBloodLossTime = 0;
-    
         lastRadarTime = 0;
         lastRadarVoiceLineTime = 0;
         isSoundPlaying = false;
@@ -143,6 +169,7 @@ public class Hev_suitClient implements ClientModInitializer {
         if (currentHealth <= 0) {
             SOUND_QUEUE.clear();
             isSoundPlaying = false;
+            wasPoisoned = false;
             soundEndTime = 0;
             return;
         }
@@ -150,11 +177,6 @@ public class Hev_suitClient implements ClientModInitializer {
         if (player.isOnFire() && currentTime - lastBurningTime >= BURNING_COOLDOWN) {
             queueSound("heat_damage");
             lastBurningTime = currentTime;
-        }
-
-        if (player.fallDistance > 3.0 && player.getHealth() < lastHealth) {
-            queueSound("major_fracture");
-            player.fallDistance = 0;
         }
 
         if (currentHealth < lastHealth) {
@@ -175,7 +197,6 @@ public class Hev_suitClient implements ClientModInitializer {
         }
 
         if (currentTime - lastMorphineTime >= MORPHINE_COOLDOWN && currentHealth < 20) {
-     
             queueSound("morphine_administered");
             lastMorphineTime = currentTime;
         }
@@ -240,10 +261,34 @@ public class Hev_suitClient implements ClientModInitializer {
 
     private void handleDamage(MinecraftClient client, float damage, DamageSource damageSource) {
         if (!hevSuitEnabled) return;
-
+    
         long currentTime = System.currentTimeMillis();
+    
+        if (damageSource != null) {
+            if (damageSource.getName().equals("fall")) {
+                if (damage >= 6) {
+                    queueSound("major_fracture");
+                } else if (damage >= 3) {
+                    queueSound("minor_fracture");
+                }
+            }
+            if (damageSource.getSource() instanceof TntEntity || damageSource.getSource() instanceof CreeperEntity) {
+                queueSound("internal_bleeding");
+            } else if (damageSource.getName().equals("explosion")) {
+                queueSound("internal_bleeding");
+            }
+            if (damageSource.getName().equals("lightningBolt")) {
+                queueSound("shock_damage");
+            }
+     if (client.player.hasStatusEffect(StatusEffects.POISON)) {
+        if (!wasPoisoned) {  // Only queue sound if this is the first tick the player is poisoned
+            queueSound("chemical");
+            wasPoisoned = true;
+        }
+    } else {
+        wasPoisoned = false;  // Reset if poison effect is no longer active
+    }
 
-        if (damageSource != null && damageSource.getSource() != null) {
             Entity damageEntity = damageSource.getSource();
             if (damageEntity instanceof ArrowEntity || damageEntity instanceof FireballEntity) {
                 if (currentTime - lastBloodLossTime >= BLOOD_LOSS_COOLDOWN) {
@@ -262,7 +307,8 @@ public class Hev_suitClient implements ClientModInitializer {
             }
         }
     }
-
+  
+ 
     private void queueSound(String soundName) {
         SOUND_QUEUE.add(soundName);
     }
@@ -279,7 +325,7 @@ public class Hev_suitClient implements ClientModInitializer {
                     String soundName = getNextPrioritizedSound();
                     SoundEvent sound = SOUND_EVENTS.get(soundName);
                     if (sound != null) {
-                        client.getSoundManager().play(PositionedSoundInstance.master(sound, 1.0F));
+                        client.getSoundManager().play(PositionedSoundInstance.master(sound, volume));
                         lastSoundTime = currentTime;
                         isSoundPlaying = true;
                         soundEndTime = currentTime + SOUND_DURATIONS.get(soundName) + SOUND_PLAY_DELAY;
@@ -292,8 +338,6 @@ public class Hev_suitClient implements ClientModInitializer {
     }
     
     private String getNextPrioritizedSound() {
-      
-        
         for (String sound : SOUND_QUEUE) {
             if (HEALTH_SOUNDS.contains(sound)) {
                 SOUND_QUEUE.remove(sound);

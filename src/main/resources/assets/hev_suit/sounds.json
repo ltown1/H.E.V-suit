@@ -69,6 +69,12 @@
   },
   "voice_off": {
     "sounds": [{"name":  "hev_suit:voice_off"}]
+  },
+  "shock_damage": {
+    "sounds": [{"name":  "hev_suit:shock_damage"}]
+  },
+  "internal_bleeding": {
+    "sounds": [{"name":  "hev_suit:internal_bleeding"}]
   }
 
 }
