@@ -23,19 +23,18 @@ import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.math.Box;
 import net.minecraft.text.Text;
-import java.util.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.*;
 
 public class Hev_suitClient implements ClientModInitializer {
 
+    private static final Logger LOGGER = LogManager.getLogger("Hev_suitClient");
+
     private static final Map<String, SoundEvent> SOUND_EVENTS = new HashMap<>();
     private static final Map<String, Integer> SOUND_DURATIONS = new HashMap<>(); // Duration in milliseconds
-    private static final Queue<String> SOUND_QUEUE = new LinkedList<>();
-    private static final Set<String> HEALTH_SOUNDS = Set.of(
-        "major_laceration", "minor_laceration", "major_fracture", 
-        "blood_loss", "health_critical", "health_critical2", 
-        "morphine_administered", "seek_medical", "near_death", "heat_damage", "shock_damage", "internal_bleeding","minor_fracture"
-    );
+    private static final PriorityQueue<PrioritizedSound> SOUND_QUEUE = new PriorityQueue<>();
 
     private float lastHealth = 20.0f;
     private boolean radarEnabled = true;
@@ -43,7 +42,7 @@ public class Hev_suitClient implements ClientModInitializer {
     private boolean isSoundPlaying = false;
     private boolean wasPoisoned = false;
 
-    private long lastSoundTime = 0;
+
     private long lastMorphineTime = 0;
     private long lastBurningTime = 0;
     private long lastLacerationTime = 0;
@@ -52,15 +51,42 @@ public class Hev_suitClient implements ClientModInitializer {
     private long lastRadarVoiceLineTime = 0;
     private long soundEndTime = 0;
 
-    private static final long SOUND_COOLDOWN = 900;
+
     private static final long MORPHINE_COOLDOWN = 90000;
     private static final long BURNING_COOLDOWN = 5000;
     private static final long BLOOD_LOSS_COOLDOWN = 5000;
     private static final long RADAR_COOLDOWN = 3000;
     private static final long RADAR_VOICE_LINE_COOLDOWN = 10000;
-    private static final long SOUND_PLAY_DELAY = 600;
 
-    private static float volume = 1.0f; // Start at 100% volume
+    private static float volume = 1.0f;
+
+    public enum SoundPriority {
+        CRITICAL,
+        HIGH,
+        MEDIUM,
+        LOW
+    }
+
+    private static class PrioritizedSound implements Comparable<PrioritizedSound> {
+        String name;
+        SoundPriority priority;
+        long timestamp;
+
+        PrioritizedSound(String name, SoundPriority priority) {
+            this.name = name;
+            this.priority = priority;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        @Override
+        public int compareTo(PrioritizedSound other) {
+            int priorityCompare = other.priority.compareTo(this.priority);
+            if (priorityCompare != 0) {
+                return priorityCompare;
+            }
+            return Long.compare(this.timestamp, other.timestamp);
+        }
+    }
 
     @Override
     public void onInitializeClient() {
@@ -74,7 +100,7 @@ public class Hev_suitClient implements ClientModInitializer {
     }
 
     public static void setVolume(float newVolume) {
-        volume = Math.max(0, Math.min(2, newVolume)); // this was for a volume system but turns out minecraft affects pitch and speed instead of volume so now its pitch
+        volume = Math.max(0, Math.min(2, newVolume));
     }
 
     private void registerSounds() {
@@ -97,10 +123,14 @@ public class Hev_suitClient implements ClientModInitializer {
     }
 
     private void registerSound(String name, int duration) {
-        SoundEvent sound = SoundEvent.of(new Identifier("hev_suit", name));
-        Registry.register(Registries.SOUND_EVENT, sound.getId(), sound);
-        SOUND_EVENTS.put(name, sound);
-        SOUND_DURATIONS.put(name, duration);
+        try {
+            SoundEvent sound = SoundEvent.of(new Identifier("hev_suit", name));
+            Registry.register(Registries.SOUND_EVENT, sound.getId(), sound);
+            SOUND_EVENTS.put(name, sound);
+            SOUND_DURATIONS.put(name, duration);
+        } catch (Exception e) {
+            LOGGER.error("Failed to register sound: " + name, e);
+        }
     }
 
     private void registerEventListeners() {
@@ -115,7 +145,7 @@ public class Hev_suitClient implements ClientModInitializer {
                     hevSuitEnabled = !hevSuitEnabled;
                     String status = hevSuitEnabled ? "Activated" : "Deactivated";
                     context.getSource().sendFeedback(Text.literal("Voice System " + status));
-                    queueSoundOverride(hevSuitEnabled ? "voice_on" : "voice_off");
+                    queueSound(hevSuitEnabled ? "voice_on" : "voice_off", SoundPriority.HIGH);
                     return 1;
                 })
             );
@@ -144,7 +174,6 @@ public class Hev_suitClient implements ClientModInitializer {
 
     private void resetTracking() {
         lastHealth = 20.0f;
-        lastSoundTime = 0;
         lastMorphineTime = 0;
         lastBurningTime = 0;
         lastLacerationTime = 0;
@@ -156,54 +185,58 @@ public class Hev_suitClient implements ClientModInitializer {
     }
 
     private void onClientTick(MinecraftClient client) {
-        if (!hevSuitEnabled) return;
+        try {
+            if (!hevSuitEnabled) return;
 
-        PlayerEntity player = client.player;
-        if (player == null) return;
+            PlayerEntity player = client.player;
+            if (player == null) return;
 
-        float currentHealth = player.getHealth();
-        long currentTime = System.currentTimeMillis();
+            float currentHealth = player.getHealth();
+            long currentTime = System.currentTimeMillis();
 
-        detectHostileMobsNearby(client);
+            detectHostileMobsNearby(client);
 
-        if (currentHealth <= 0) {
-            SOUND_QUEUE.clear();
-            isSoundPlaying = false;
-            wasPoisoned = false;
-            soundEndTime = 0;
-            return;
+            if (currentHealth <= 0) {
+                SOUND_QUEUE.clear();
+                isSoundPlaying = false;
+                wasPoisoned = false;
+                soundEndTime = 0;
+                return;
+            }
+
+            if (player.isOnFire() && currentTime - lastBurningTime >= BURNING_COOLDOWN) {
+                queueSound("heat_damage", SoundPriority.MEDIUM);
+                lastBurningTime = currentTime;
+            }
+
+            if (currentHealth < lastHealth) {
+                float damage = lastHealth - currentHealth;
+                handleDamage(client, damage, player.getRecentDamageSource());
+            }
+
+            if (currentHealth <= 3.0 && this.lastHealth > 3.0) {
+                this.queueSound("near_death", SoundPriority.CRITICAL);
+            } 
+            else if (currentHealth <= 5.0 && this.lastHealth > 5.0) {
+                this.queueSound("health_critical", SoundPriority.CRITICAL);
+            }
+            else if (currentHealth <= 10.0 && this.lastHealth > 10.0) {
+                this.queueSound("seek_medical", SoundPriority.CRITICAL);
+            } else if (currentHealth <= 17.0 && this.lastHealth > 17.0) {
+                this.queueSound("health_critical2", SoundPriority.CRITICAL);
+            }
+
+            if (currentTime - lastMorphineTime >= MORPHINE_COOLDOWN && currentHealth < 20) {
+                queueSound("morphine_administered", SoundPriority.MEDIUM);
+                lastMorphineTime = currentTime;
+            }
+
+            lastHealth = currentHealth;
+
+            processSoundQueueOverride(client, currentTime);
+        } catch (Exception e) {
+            LOGGER.error("Error in HEV suit client tick", e);
         }
-
-        if (player.isOnFire() && currentTime - lastBurningTime >= BURNING_COOLDOWN) {
-            queueSound("heat_damage");
-            lastBurningTime = currentTime;
-        }
-
-        if (currentHealth < lastHealth) {
-            float damage = lastHealth - currentHealth;
-            handleDamage(client, damage, player.getRecentDamageSource());
-        }
-
-        if (currentHealth <= 3.0 && this.lastHealth > 3.0) {
-            this.queueSound("near_death");
-        } 
-        else if (currentHealth <= 5.0 && this.lastHealth > 5.0) {
-            this.queueSound("health_critical");
-        }
-        else if (currentHealth <= 10.0 && this.lastHealth > 10.0) {
-            this.queueSound("seek_medical");
-        } else if (currentHealth <= 17.0 && this.lastHealth > 17.0) {
-            this.queueSound("health_critical2");
-        }
-
-        if (currentTime - lastMorphineTime >= MORPHINE_COOLDOWN && currentHealth < 20) {
-            queueSound("morphine_administered");
-            lastMorphineTime = currentTime;
-        }
-
-        lastHealth = currentHealth;
-
-        processSoundQueueOverride(client, currentTime);
     }
 
     private void detectHostileMobsNearby(MinecraftClient client) {
@@ -224,8 +257,8 @@ public class Hev_suitClient implements ClientModInitializer {
 
         if (detectedMobs.size() > 3) {
             if (currentTime - lastRadarVoiceLineTime >= RADAR_VOICE_LINE_COOLDOWN) {
-                queueSound("evacuate_area");
-                queueSound("immediately");
+                queueSound("evacuate_area", SoundPriority.HIGH);
+                queueSound("immediately", SoundPriority.HIGH);
                 lastRadarVoiceLineTime = currentTime;
             }
         } else if (detectedMobs.size() > 0) {
@@ -236,8 +269,8 @@ public class Hev_suitClient implements ClientModInitializer {
                 String direction = getDirection(deltaX, deltaZ);
 
                 if (direction != null) {
-                    queueSound("warning");
-                    queueSound(direction);
+                    queueSound("warning", SoundPriority.LOW);
+                    queueSound(direction, SoundPriority.LOW);
                     lastRadarTime = currentTime;
                     break;
                 }
@@ -267,40 +300,40 @@ public class Hev_suitClient implements ClientModInitializer {
         if (damageSource != null) {
             if (damageSource.getName().equals("fall")) {
                 if (damage >= 6) {
-                    queueSound("major_fracture");
+                    queueSound("major_fracture", SoundPriority.HIGH);
                 } else if (damage >= 3) {
-                    queueSound("minor_fracture");
+                    queueSound("minor_fracture", SoundPriority.HIGH);
                 }
             }
             if (damageSource.getSource() instanceof TntEntity || damageSource.getSource() instanceof CreeperEntity) {
-                queueSound("internal_bleeding");
+                queueSound("internal_bleeding", SoundPriority.HIGH);
             } else if (damageSource.getName().equals("explosion")) {
-                queueSound("internal_bleeding");
+                queueSound("internal_bleeding", SoundPriority.HIGH);
             }
             if (damageSource.getName().equals("lightningBolt")) {
-                queueSound("shock_damage");
+                queueSound("shock_damage", SoundPriority.HIGH);
             }
-     if (client.player.hasStatusEffect(StatusEffects.POISON)) {
-        if (!wasPoisoned) {  // Only queue sound if this is the first tick the player is poisoned
-            queueSound("chemical");
-            wasPoisoned = true;
-        }
-    } else {
-        wasPoisoned = false;  // Reset if poison effect is no longer active
-    }
+            if (client.player.hasStatusEffect(StatusEffects.POISON)) {
+                if (!wasPoisoned) {
+                    queueSound("chemical", SoundPriority.HIGH);
+                    wasPoisoned = true;
+                }
+            } else {
+                wasPoisoned = false;
+            }
 
             Entity damageEntity = damageSource.getSource();
             if (damageEntity instanceof ArrowEntity || damageEntity instanceof FireballEntity) {
                 if (currentTime - lastBloodLossTime >= BLOOD_LOSS_COOLDOWN) {
-                    queueSound("blood_loss");
+                    queueSound("blood_loss", SoundPriority.LOW);
                     lastBloodLossTime = currentTime;
                 }
             } else if (damageEntity instanceof HostileEntity) {
                 if (currentTime - lastLacerationTime >= BLOOD_LOSS_COOLDOWN) {
                     if (damage >= 5) {
-                        queueSound("major_laceration");
+                        queueSound("major_laceration", SoundPriority.HIGH);
                     } else {
-                        queueSound("minor_laceration");
+                        queueSound("minor_laceration", SoundPriority.LOW);
                     }
                     lastLacerationTime = currentTime;
                 }
@@ -308,43 +341,62 @@ public class Hev_suitClient implements ClientModInitializer {
         }
     }
   
- 
-    private void queueSound(String soundName) {
-        SOUND_QUEUE.add(soundName);
-    }
-
-    private void queueSoundOverride(String soundName) {
-        SOUND_QUEUE.add(soundName);
-        processSoundQueueOverride(MinecraftClient.getInstance(), System.currentTimeMillis());
-    }
+    private PrioritizedSound currentPlayingSound = null;
+    private Queue<PrioritizedSound> highPriorityQueue = new LinkedList<>();
+    private Queue<PrioritizedSound> lowPriorityQueue = new LinkedList<>();
 
     private void processSoundQueueOverride(MinecraftClient client, long currentTime) {
-        if (!SOUND_QUEUE.isEmpty()) {
-            if (!isSoundPlaying || (currentTime - soundEndTime >= SOUND_PLAY_DELAY)) {
-                if (currentTime - lastSoundTime >= SOUND_COOLDOWN) {
-                    String soundName = getNextPrioritizedSound();
-                    SoundEvent sound = SOUND_EVENTS.get(soundName);
-                    if (sound != null) {
-                        client.getSoundManager().play(PositionedSoundInstance.master(sound, volume));
-                        lastSoundTime = currentTime;
-                        isSoundPlaying = true;
-                        soundEndTime = currentTime + SOUND_DURATIONS.get(soundName) + SOUND_PLAY_DELAY;
-                    }
+        if (!highPriorityQueue.isEmpty() || !lowPriorityQueue.isEmpty()) {
+            if (!isSoundPlaying || currentTime >= soundEndTime) {
+                playNextSound(client, currentTime);
+            } else {
+                // Check if we need to interrupt the current sound
+                PrioritizedSound nextSound = highPriorityQueue.peek();
+                if (nextSound != null && currentPlayingSound != null &&
+                    (nextSound.priority == SoundPriority.CRITICAL || nextSound.priority == SoundPriority.HIGH) &&
+                    (currentPlayingSound.priority == SoundPriority.MEDIUM || currentPlayingSound.priority == SoundPriority.LOW)) {
+                    playNextSound(client, currentTime);
                 }
             }
         } else {
             isSoundPlaying = false;
+            currentPlayingSound = null;
         }
     }
-    
-    private String getNextPrioritizedSound() {
-        for (String sound : SOUND_QUEUE) {
-            if (HEALTH_SOUNDS.contains(sound)) {
-                SOUND_QUEUE.remove(sound);
-                return sound;
+
+    private void playNextSound(MinecraftClient client, long currentTime) {
+        PrioritizedSound nextSound = highPriorityQueue.poll();
+        if (nextSound == null) {
+            nextSound = lowPriorityQueue.poll();
+        }
+
+        if (nextSound != null) {
+            String soundName = nextSound.name;
+            SoundEvent sound = SOUND_EVENTS.get(soundName);
+            if (sound != null) {
+                try {
+                    if (isSoundPlaying) {
+                        client.getSoundManager().stopAll(); // Stop current sound if interrupting
+                    }
+                    client.getSoundManager().play(PositionedSoundInstance.master(sound, volume));
+                    isSoundPlaying = true;
+                    currentPlayingSound = nextSound;
+                    soundEndTime = currentTime + SOUND_DURATIONS.get(soundName);
+                } catch (Exception e) {
+                    LOGGER.error("Error playing sound: " + soundName, e);
+                }
+            } else {
+                LOGGER.warn("Sound not found: " + soundName);
             }
         }
-        
-        return SOUND_QUEUE.poll();
+    }
+
+    private void queueSound(String soundName, SoundPriority priority) {
+        PrioritizedSound newSound = new PrioritizedSound(soundName, priority);
+        if (priority == SoundPriority.CRITICAL || priority == SoundPriority.HIGH) {
+            highPriorityQueue.offer(newSound);
+        } else {
+            lowPriorityQueue.offer(newSound);
+        }
     }
 }
