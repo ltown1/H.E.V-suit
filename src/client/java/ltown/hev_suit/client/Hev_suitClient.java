@@ -74,7 +74,7 @@ public class Hev_suitClient implements ClientModInitializer {
     }
 
     public static void setVolume(float newVolume) {
-        volume = Math.max(0, Math.min(1, newVolume)); // Allow up to 100% volume
+        volume = Math.max(0, Math.min(2, newVolume)); // this was for a volume system but turns out minecraft affects pitch and speed instead of volume so now its pitch
     }
 
     private void registerSounds() {
@@ -129,12 +129,12 @@ public class Hev_suitClient implements ClientModInitializer {
                 })
             );
 
-            dispatcher.register(ClientCommandManager.literal("hevvolume")
-                .then(ClientCommandManager.argument("volume", FloatArgumentType.floatArg(0, 1))
+            dispatcher.register(ClientCommandManager.literal("hevpitch")
+                .then(ClientCommandManager.argument("pitch", FloatArgumentType.floatArg(0, 2))
                     .executes(context -> {
-                        float newVolume = FloatArgumentType.getFloat(context, "volume");
+                        float newVolume = FloatArgumentType.getFloat(context, "pitch");
                         setVolume(newVolume);
-                        context.getSource().sendFeedback(Text.literal("HEV Suit volume set to " + (int)(newVolume * 100) + "%"));
+                        context.getSource().sendFeedback(Text.literal("HEV Suit pitch set to " + (int)(newVolume * 100) + "%"));
                         return 1;
                     })
                 )
