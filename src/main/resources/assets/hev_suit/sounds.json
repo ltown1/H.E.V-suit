@@ -26,6 +26,12 @@
   "seek_medical": {
     "sounds": [{"name": "hev_suit:seek_medic"}]
   },
+  "warning": {
+  "sounds": [{"name": "hev_suit:warning"}]
+},
+"bio_reading": {
+  "sounds": [{"name": "hev_suit:bio_reading"}]
+},
   "near_death": {
     "sounds": [{"name": "hev_suit:near_death"}]
   },

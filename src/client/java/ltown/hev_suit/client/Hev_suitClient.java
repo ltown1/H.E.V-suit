@@ -11,6 +11,7 @@ import net.minecraft.client.sound.PositionedSoundInstance;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.damage.DamageTypes;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
@@ -42,7 +43,6 @@ public class Hev_suitClient implements ClientModInitializer {
     private boolean isSoundPlaying = false;
     private boolean wasPoisoned = false;
 
-
     private long lastMorphineTime = 0;
     private long lastBurningTime = 0;
     private long lastLacerationTime = 0;
@@ -50,7 +50,6 @@ public class Hev_suitClient implements ClientModInitializer {
     private long lastRadarTime = 0;
     private long lastRadarVoiceLineTime = 0;
     private long soundEndTime = 0;
-
 
     private static final long MORPHINE_COOLDOWN = 90000;
     private static final long BURNING_COOLDOWN = 5000;
@@ -124,8 +123,9 @@ public class Hev_suitClient implements ClientModInitializer {
 
     private void registerSound(String name, int duration) {
         try {
-            SoundEvent sound = SoundEvent.of(new Identifier("hev_suit", name));
-            Registry.register(Registries.SOUND_EVENT, sound.getId(), sound);
+            Identifier soundId = Identifier.of("hev_suit", name);
+            SoundEvent sound = SoundEvent.of(soundId);
+            Registry.register(Registries.SOUND_EVENT, soundId, sound);
             SOUND_EVENTS.put(name, sound);
             SOUND_DURATIONS.put(name, duration);
         } catch (Exception e) {
@@ -298,7 +298,7 @@ public class Hev_suitClient implements ClientModInitializer {
         long currentTime = System.currentTimeMillis();
     
         if (damageSource != null) {
-            if (damageSource.getName().equals("fall")) {
+            if (damageSource.isOf(DamageTypes.FALL)) {
                 if (damage >= 6) {
                     queueSound("major_fracture", SoundPriority.HIGH);
                 } else if (damage >= 3) {
@@ -307,10 +307,10 @@ public class Hev_suitClient implements ClientModInitializer {
             }
             if (damageSource.getSource() instanceof TntEntity || damageSource.getSource() instanceof CreeperEntity) {
                 queueSound("internal_bleeding", SoundPriority.HIGH);
-            } else if (damageSource.getName().equals("explosion")) {
+            } else if (damageSource.isOf(DamageTypes.EXPLOSION)) {
                 queueSound("internal_bleeding", SoundPriority.HIGH);
             }
-            if (damageSource.getName().equals("lightningBolt")) {
+            if (damageSource.isOf(DamageTypes.LIGHTNING_BOLT)) {
                 queueSound("shock_damage", SoundPriority.HIGH);
             }
             if (client.player.hasStatusEffect(StatusEffects.POISON)) {
@@ -345,7 +345,7 @@ public class Hev_suitClient implements ClientModInitializer {
     private Queue<PrioritizedSound> highPriorityQueue = new LinkedList<>();
     private Queue<PrioritizedSound> lowPriorityQueue = new LinkedList<>();
 
-    private void processSoundQueueOverride(MinecraftClient client, long currentTime) {
+ private void processSoundQueueOverride(MinecraftClient client, long currentTime) {
         if (!highPriorityQueue.isEmpty() || !lowPriorityQueue.isEmpty()) {
             if (!isSoundPlaying || currentTime >= soundEndTime) {
                 playNextSound(client, currentTime);
